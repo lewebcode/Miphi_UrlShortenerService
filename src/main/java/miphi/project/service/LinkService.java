@@ -70,7 +70,23 @@ public class LinkService implements ILinkService {
 
     @Override
     public List<Link> getUserLinks(UUID userUuid) {
-        return userLinks.getOrDefault(userUuid, Collections.emptyList());
+        List<Link> userLinksList = userLinks.getOrDefault(userUuid, Collections.emptyList());
+
+        long now = System.currentTimeMillis();
+        userLinksList.removeIf(link -> {
+            boolean isExpired = now > link.expiryTime;
+            boolean isLimitExceeded = link.accessCount >= link.limit;
+
+            if (isExpired || isLimitExceeded) {
+                linkMap.remove(link.shortUrl);
+                System.out.println((isExpired ? "Ссылка истекла: " : "Лимит переходов исчерпан для ссылки: ") + link.shortUrl);
+                return true;
+            }
+
+            return false;
+        });
+
+        return userLinksList;
     }
 
     @Override
@@ -90,7 +106,6 @@ public class LinkService implements ILinkService {
         link.limit = newLimit;
         return true;
     }
-
 
     @Override
     public boolean deleteUserLink(String shortUrl, UUID userUuid) {
@@ -118,19 +133,24 @@ public class LinkService implements ILinkService {
     private void cleanupExpiredLinks() {
         long now = System.currentTimeMillis();
 
-        // Ищем и удаляем устаревшие ссылки или ссылки с исчерпанным лимитом переходов
-        linkMap.values().removeIf(link -> {
+        Iterator<Map.Entry<String, Link>> iterator = linkMap.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, Link> entry = iterator.next();
+            Link link = entry.getValue();
+
             boolean isExpired = now > link.expiryTime;
             boolean isLimitExceeded = link.accessCount >= link.limit;
 
-            if (isExpired) {
-                System.out.println("Ссылка истекла: " + link.shortUrl);
-            } else if (isLimitExceeded) {
-                System.out.println("Лимит переходов исчерпан для ссылки: " + link.shortUrl);
-            }
+            if (isExpired || isLimitExceeded) {
+                iterator.remove();
+                System.out.println((isExpired ? "Ссылка истекла: " : "Лимит переходов исчерпан для ссылки: ") + link.shortUrl);
 
-            return isExpired || isLimitExceeded;
-        });
+                List<Link> userLinksList = userLinks.get(link.userUuid);
+                if (userLinksList != null) {
+                    userLinksList.removeIf(l -> l.shortUrl.equals(link.shortUrl));
+                }
+            }
+        }
 
         System.out.println("Очистка устаревших или заблокированных ссылок завершена.");
     }

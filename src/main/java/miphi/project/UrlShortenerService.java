@@ -38,7 +38,7 @@ public class UrlShortenerService {
             System.out.println("9. Выход");
 
             int choice = scanner.nextInt();
-            scanner.nextLine(); // Consume newline
+            scanner.nextLine();
 
             switch (choice) {
                 case 1 -> {
