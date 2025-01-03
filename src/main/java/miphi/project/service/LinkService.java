@@ -10,6 +10,10 @@ import miphi.project.interfaces.ILinkService;
 import miphi.project.model.Link;
 import miphi.project.util.ConfigService;
 
+/**
+ * Класс для создания, обновления и удаления коротких ссылок
+ * с учётом срока действия и лимита переходов.
+ */
 public class LinkService implements ILinkService {
     private final String baseUrl = new ConfigService().getConfigValue("base_url", "https://short.ly/");
     private final long defaultLifetimeMs = new ConfigService().getLongConfigValue("default_link_lifetime_ms", 86400000);
@@ -23,6 +27,15 @@ public class LinkService implements ILinkService {
         executor.scheduleAtFixedRate(this::cleanupExpiredLinks, 1, 1, TimeUnit.HOURS);
     }
 
+    /**
+     * Создает короткую ссылку для указанного URL.
+     *
+     * @param originalUrl исходный URL
+     * @param userUuid идентификатор пользователя
+     * @param userDefinedLimit заданный пользователем лимит переходов
+     * @param userDefinedLifetimeMs время жизни ссылки в миллисекундах
+     * @return короткая ссылка
+     */
     @Override
     public String createShortLink(String originalUrl, UUID userUuid, int userDefinedLimit, long userDefinedLifetimeMs) {
         String uniqueKey = UUID.randomUUID().toString().substring(0, 8);
@@ -41,6 +54,67 @@ public class LinkService implements ILinkService {
         return shortUrl;
     }
 
+    /**
+     * Обновляет лимит переходов для указанной короткой ссылки.
+     *
+     * @param shortUrl Короткая ссылка, для которой необходимо обновить лимит.
+     * @param userUuid Уникальный идентификатор пользователя.
+     * @param newLimit Новый лимит переходов для короткой ссылки.
+     * @return True, если обновление прошло успешно; false в противном случае.
+     */
+    @Override
+    public boolean updateLinkLimit(String shortUrl, UUID userUuid, int newLimit) {
+        Link link = linkMap.get(shortUrl);
+
+        if (link == null) {
+            System.out.println("Ссылка не найдена.");
+            return false;
+        }
+
+        if (!link.userUuid.equals(userUuid)) {
+            System.out.println("У вас нет прав на изменение лимита этой ссылки.");
+            return false;
+        }
+
+        link.limit = newLimit;
+        return true;
+    }
+
+    /**
+     * Удаляет короткую ссылку пользователя, если у него есть права на это.
+     *
+     * @param shortUrl Короткая ссылка, которую нужно удалить.
+     * @param userUuid Уникальный идентификатор пользователя.
+     * @return True, если удаление прошло успешно; false в противном случае.
+     */
+    @Override
+    public boolean deleteUserLink(String shortUrl, UUID userUuid) {
+        Link link = linkMap.get(shortUrl);
+
+        if (link == null) {
+            System.out.println("Ссылка не найдена.");
+            return false;
+        }
+
+        if (!link.userUuid.equals(userUuid)) {
+            System.out.println("У вас нет прав на удаление этой ссылки.");
+            return false;
+        }
+
+        linkMap.remove(shortUrl);
+        List<Link> userLinksList = userLinks.get(userUuid);
+        if (userLinksList != null) {
+            userLinksList.removeIf(l -> l.shortUrl.equals(shortUrl));
+        }
+
+        return true;
+    }
+
+    /**
+     * Осуществляет переход по короткой ссылке, обновляя её счётчик переходов, если она действительна.
+     *
+     * @param shortUrl Короткая ссылка для перехода.
+     */
     @Override
     public void accessLink(String shortUrl) {
         Link link = linkMap.get(shortUrl);
@@ -71,6 +145,12 @@ public class LinkService implements ILinkService {
         }
     }
 
+    /**
+     * Получает список коротких ссылок, связанных с указанным пользователем.
+     *
+     * @param userUuid Уникальный идентификатор пользователя.
+     * @return Список коротких ссылок пользователя.
+     */
     @Override
     public List<Link> getUserLinks(UUID userUuid) {
         List<Link> userLinksList = userLinks.getOrDefault(userUuid, Collections.emptyList());
@@ -92,47 +172,9 @@ public class LinkService implements ILinkService {
         return userLinksList;
     }
 
-    @Override
-    public boolean updateLinkLimit(String shortUrl, UUID userUuid, int newLimit) {
-        Link link = linkMap.get(shortUrl);
-
-        if (link == null) {
-            System.out.println("Ссылка не найдена.");
-            return false;
-        }
-
-        if (!link.userUuid.equals(userUuid)) {
-            System.out.println("У вас нет прав на изменение лимита этой ссылки.");
-            return false;
-        }
-
-        link.limit = newLimit;
-        return true;
-    }
-
-    @Override
-    public boolean deleteUserLink(String shortUrl, UUID userUuid) {
-        Link link = linkMap.get(shortUrl);
-
-        if (link == null) {
-            System.out.println("Ссылка не найдена.");
-            return false;
-        }
-
-        if (!link.userUuid.equals(userUuid)) {
-            System.out.println("У вас нет прав на удаление этой ссылки.");
-            return false;
-        }
-
-        linkMap.remove(shortUrl);
-        List<Link> userLinksList = userLinks.get(userUuid);
-        if (userLinksList != null) {
-            userLinksList.removeIf(l -> l.shortUrl.equals(shortUrl));
-        }
-
-        return true;
-    }
-
+    /**
+     * Очищает устаревшие или заблокированные ссылки из памяти сервиса.
+     */
     private void cleanupExpiredLinks() {
         long now = System.currentTimeMillis();
 

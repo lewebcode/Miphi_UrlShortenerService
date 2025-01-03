@@ -9,9 +9,20 @@ import java.util.concurrent.ConcurrentHashMap;
 import miphi.project.interfaces.IUserService;
 import miphi.project.model.User;
 
+/**
+ * Сервис для управления пользователями.
+ * Обрабатывает регистрацию, авторизацию и извлечение данных пользователя.
+ */
 public class UserService implements IUserService {
     private final Map<String, User> userMap = new ConcurrentHashMap<>();
 
+    /**
+     * Регистрация нового пользователя.
+     *
+     * @param username Имя пользователя.
+     * @param password Пароль пользователя.
+     * @return True, если пользователь успешно зарегистрирован; false, если имя уже занято.
+     */
     @Override
     public boolean registerUser(String username, String password) {
         if (userMap.containsKey(username)) {
@@ -25,6 +36,13 @@ public class UserService implements IUserService {
         return true;
     }
 
+    /**
+     * Авторизация пользователя.
+     *
+     * @param username Имя пользователя.
+     * @param password Пароль пользователя.
+     * @return UUID пользователя, если авторизация успешна, или null, если ошибка.
+     */
     @Override
     public UUID loginUser(String username, String password) {
         User user = userMap.get(username);
@@ -42,6 +60,12 @@ public class UserService implements IUserService {
         }
     }
 
+    /**
+     * Получает данные пользователя по UUID.
+     *
+     * @param userUuid UUID пользователя.
+     * @return Пользователь, если найден, иначе null.
+     */
     @Override
     public User getUser(UUID userUuid) {
         return userMap.values().stream()
@@ -50,6 +74,12 @@ public class UserService implements IUserService {
                 .orElse(null);
     }
 
+    /**
+     * Хеширует пароль пользователя с использованием алгоритма MD5.
+     *
+     * @param password Пароль, который необходимо захешировать.
+     * @return Хеш пароля.
+     */
     private String hashPassword(String password) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");

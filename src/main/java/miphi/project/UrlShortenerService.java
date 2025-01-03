@@ -11,15 +11,28 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.UUID;
 
+/**
+ * Сервис для создания коротких ссылок и управления ими.
+ * Позволяет пользователям регистрироваться, авторизовываться, создавать короткие ссылки, просматривать и управлять ими.
+ */
 public class UrlShortenerService {
     private final IUserService userService;
     private final ILinkService linkService;
 
+    /**
+     * Конструктор, инициализирует сервисы пользователя и коротких ссылок.
+     */
     public UrlShortenerService() {
         this.userService = new UserService();
         this.linkService = new LinkService();
     }
 
+    /**
+     * Основной метод, который запускает приложение и обрабатывает пользовательский ввод.
+     * Предоставляет меню для выбора действия и взаимодействия с сервисом через консоль.
+     *
+     * @param args аргументы командной строки
+     */
     public static void main(String[] args) {
         UrlShortenerService app = new UrlShortenerService();
         Scanner scanner = new Scanner(System.in);
