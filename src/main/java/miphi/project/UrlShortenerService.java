@@ -1,136 +1,145 @@
 package miphi.project;
 
-import java.net.URI;
-import java.awt.Desktop;
-import java.util.*;
-import java.util.concurrent.*;
+import miphi.project.interfaces.ILinkService;
+import miphi.project.interfaces.IUserService;
+import miphi.project.service.LinkService;
+import miphi.project.service.UserService;
+import miphi.project.model.Link;
+import miphi.project.model.User;
+
+import java.util.List;
+import java.util.Scanner;
+import java.util.UUID;
 
 public class UrlShortenerService {
-
-    public static class Link {
-        String originalUrl;
-        String shortUrl;
-        UUID userUuid;
-        int limit;
-        long expiryTime;
-        int accessCount;
-
-        Link(String originalUrl, String shortUrl, UUID userUuid, int limit, long expiryTime) {
-            this.originalUrl = originalUrl;
-            this.shortUrl = shortUrl;
-            this.userUuid = userUuid;
-            this.limit = limit;
-            this.expiryTime = expiryTime;
-            this.accessCount = 0;
-        }
-    }
-
-    private static final String BASE_URL = "https://short.ly/";
-    private static final long LINK_LIFETIME_MS = 24 * 60 * 60 * 1000; // 24 часа
-    private final Map<String, Link> linkMap = new ConcurrentHashMap<>();
-    private final Map<UUID, List<Link>> userLinks = new ConcurrentHashMap<>();
-    private static final ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+    private final IUserService userService;
+    private final ILinkService linkService;
 
     public UrlShortenerService() {
-        // Запуск задачи для удаления устаревших ссылок
-        executor.scheduleAtFixedRate(this::cleanupExpiredLinks, 1, 1, TimeUnit.HOURS);
-    }
-
-    public String createShortLink(String originalUrl, UUID userUuid, int limit) {
-        String uniqueKey = UUID.randomUUID().toString().substring(0, 8);
-        String shortUrl = BASE_URL + uniqueKey;
-        long expiryTime = System.currentTimeMillis() + LINK_LIFETIME_MS;
-
-        Link link = new Link(originalUrl, shortUrl, userUuid, limit, expiryTime);
-        linkMap.put(shortUrl, link);
-        userLinks.computeIfAbsent(userUuid, k -> new ArrayList<>()).add(link);
-
-        return shortUrl;
-    }
-
-    public void accessLink(String shortUrl) {
-        Link link = linkMap.get(shortUrl);
-
-        if (link == null) {
-            System.out.println("Ссылка не найдена или её срок истёк.");
-            return;
-        }
-
-        if (link.accessCount >= link.limit) {
-            System.out.println("Лимит переходов по ссылке исчерпан.");
-            return;
-        }
-
-        if (System.currentTimeMillis() > link.expiryTime) {
-            System.out.println("Срок действия ссылки истёк.");
-            linkMap.remove(shortUrl);
-            return;
-        }
-
-        link.accessCount++;
-        System.out.println("Переход по ссылке...");
-        try {
-            Desktop.getDesktop().browse(new URI(link.originalUrl));
-        } catch (Exception e) {
-            System.err.println("Ошибка при открытии ссылки: " + e.getMessage());
-        }
-    }
-
-    private void cleanupExpiredLinks() {
-        long now = System.currentTimeMillis();
-        linkMap.values().removeIf(link -> now > link.expiryTime);
-        System.out.println("Очистка устаревших ссылок завершена.");
-    }
-
-    public List<Link> getUserLinks(UUID userUuid) {
-        return userLinks.getOrDefault(userUuid, Collections.emptyList());
+        this.userService = new UserService();
+        this.linkService = new LinkService();
     }
 
     public static void main(String[] args) {
-        UrlShortenerService service = new UrlShortenerService();
+        UrlShortenerService app = new UrlShortenerService();
         Scanner scanner = new Scanner(System.in);
-
-        System.out.println("Добро пожаловать в сервис сокращения ссылок!");
-        System.out.println("Генерация UUID для пользователя...");
-        UUID userUuid = UUID.randomUUID();
-        System.out.println("Ваш UUID: " + userUuid);
+        UUID currentUserUuid = null;
 
         while (true) {
             System.out.println("\nВыберите действие:");
-            System.out.println("1. Создать короткую ссылку");
-            System.out.println("2. Перейти по короткой ссылке");
-            System.out.println("3. Просмотреть мои ссылки");
-            System.out.println("4. Выход");
+            System.out.println("1. Регистрация");
+            System.out.println("2. Авторизация");
+            System.out.println("3. Показать информацию о пользователе");
+            System.out.println("4. Создать короткую ссылку");
+            System.out.println("5. Перейти по короткой ссылке");
+            System.out.println("6. Просмотреть мои ссылки");
+            System.out.println("7. Удалить ссылку");
+            System.out.println("8. Изменить лимит переходов по ссылке");
+            System.out.println("9. Выход");
+
             int choice = scanner.nextInt();
-            scanner.nextLine(); // Consume newline
+            scanner.nextLine();
 
             switch (choice) {
                 case 1 -> {
+                    System.out.println("Введите имя пользователя:");
+                    String username = scanner.nextLine();
+                    System.out.println("Введите пароль:");
+                    String password = scanner.nextLine();
+                    boolean isRegistered = app.userService.registerUser(username, password);
+                    if (!isRegistered) {
+                        System.out.println("Не удалось зарегистрировать пользователя. Попробуйте снова.");
+                    } else {
+                        System.out.println("Регистрация успешна.");
+                    }
+                }
+                case 2 -> {
+                    System.out.println("Введите имя пользователя:");
+                    String username = scanner.nextLine();
+                    System.out.println("Введите пароль:");
+                    String password = scanner.nextLine();
+                    currentUserUuid = app.userService.loginUser(username, password);
+                }
+                case 3 -> {
+                    if (currentUserUuid == null) {
+                        System.out.println("Сначала выполните авторизацию.");
+                        break;
+                    }
+                    User user = app.userService.getUser(currentUserUuid);
+                    if (user != null) {
+                        System.out.println("Информация о пользователе:");
+                        System.out.println("UUID: " + user.userUuid);
+                        System.out.println("Имя пользователя: " + user.username);
+                    } else {
+                        System.out.println("Пользователь не найден.");
+                    }
+                }
+                case 4 -> {
+                    if (currentUserUuid == null) {
+                        System.out.println("Сначала выполните авторизацию.");
+                        break;
+                    }
                     System.out.println("Введите длинный URL:");
                     String originalUrl = scanner.nextLine();
                     System.out.println("Введите лимит переходов:");
                     int limit = scanner.nextInt();
-                    scanner.nextLine(); // Consume newline
-
-                    String shortUrl = service.createShortLink(originalUrl, userUuid, limit);
+                    System.out.println("Введите время жизни ссылки (в миллисекундах):");
+                    long lifetimeMs = scanner.nextLong();
+                    scanner.nextLine();
+                    String shortUrl = app.linkService.createShortLink(originalUrl, currentUserUuid, limit, lifetimeMs);
                     System.out.println("Короткая ссылка: " + shortUrl);
                 }
-                case 2 -> {
+                case 5 -> {
                     System.out.println("Введите короткую ссылку:");
                     String shortUrl = scanner.nextLine();
-                    service.accessLink(shortUrl);
+                    app.linkService.accessLink(shortUrl);
                 }
-                case 3 -> {
+                case 6 -> {
+                    if (currentUserUuid == null) {
+                        System.out.println("Сначала выполните авторизацию.");
+                        break;
+                    }
                     System.out.println("Ваши ссылки:");
-                    List<Link> links = service.getUserLinks(userUuid);
+                    List<Link> links = app.linkService.getUserLinks(currentUserUuid);
                     for (Link link : links) {
                         System.out.println(link.shortUrl + " -> " + link.originalUrl);
                         System.out.println("Лимит: " + link.limit + ", Переходы: " + link.accessCount);
                     }
                 }
-                case 4 -> {
+                case 7 -> {
+                    if (currentUserUuid == null) {
+                        System.out.println("Сначала выполните авторизацию.");
+                        break;
+                    }
+                    System.out.println("Введите короткую ссылку для удаления:");
+                    String shortUrlToDelete = scanner.nextLine();
+                    boolean isDeleted = app.linkService.deleteUserLink(shortUrlToDelete, currentUserUuid);
+                    if (isDeleted) {
+                        System.out.println("Ссылка удалена успешно.");
+                    } else {
+                        System.out.println("Не удалось удалить ссылку. Проверьте правильность данных.");
+                    }
+                }
+                case 8 -> {
+                    if (currentUserUuid == null) {
+                        System.out.println("Сначала выполните авторизацию.");
+                        break;
+                    }
+                    System.out.println("Введите короткую ссылку для изменения лимита:");
+                    String shortUrlToUpdate = scanner.nextLine();
+                    System.out.println("Введите новый лимит переходов:");
+                    int newLimit = scanner.nextInt();
+                    scanner.nextLine();
+                    boolean isUpdated = app.linkService.updateLinkLimit(shortUrlToUpdate, currentUserUuid, newLimit);
+                    if (isUpdated) {
+                        System.out.println("Лимит переходов успешно обновлён.");
+                    } else {
+                        System.out.println("Не удалось обновить лимит переходов. Проверьте правильность данных.");
+                    }
+                }
+                case 9 -> {
                     System.out.println("Выход из системы. До свидания!");
-                    executor.shutdown();
+                    ((LinkService) app.linkService).executor.shutdown();
                     return;
                 }
                 default -> System.out.println("Неверный выбор. Попробуйте снова.");
@@ -138,4 +147,3 @@ public class UrlShortenerService {
         }
     }
 }
-
