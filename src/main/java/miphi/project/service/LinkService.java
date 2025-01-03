@@ -88,7 +88,6 @@ public class LinkService implements ILinkService {
         }
 
         link.limit = newLimit;
-        System.out.println("Лимит переходов по ссылке успешно обновлён.");
         return true;
     }
 
@@ -113,7 +112,6 @@ public class LinkService implements ILinkService {
             userLinksList.removeIf(l -> l.shortUrl.equals(shortUrl));
         }
 
-        System.out.println("Ссылка успешно удалена.");
         return true;
     }
 
