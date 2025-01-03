@@ -7,10 +7,13 @@ import java.util.concurrent.*;
 
 import miphi.project.interfaces.ILinkService;
 import miphi.project.model.Link;
+import miphi.project.util.ConfigService;
 
 public class LinkService implements ILinkService {
-    private static final String BASE_URL = "https://short.ly/";
-    private static final long LINK_LIFETIME_MS = 24 * 60 * 60 * 1000; // 24 часа
+    private final String baseUrl = new ConfigService().getConfigValue("base_url", "https://short.ly/");
+    private final long defaultLifetimeMs = new ConfigService().getLongConfigValue("default_link_lifetime_ms", 86400000);
+    private final int maxAccessLimit = new ConfigService().getIntConfigValue("max_link_access_limit", 100);
+
     private final Map<String, Link> linkMap = new ConcurrentHashMap<>();
     private final Map<UUID, List<Link>> userLinks = new ConcurrentHashMap<>();
     public final ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
@@ -20,32 +23,44 @@ public class LinkService implements ILinkService {
     }
 
     @Override
-    public String createShortLink(String originalUrl, UUID userUuid, int limit) {
+    public String createShortLink(String originalUrl, UUID userUuid, int userDefinedLimit, long userDefinedLifetimeMs) {
         String uniqueKey = UUID.randomUUID().toString().substring(0, 8);
-        String shortUrl = BASE_URL + uniqueKey;
-        long expiryTime = System.currentTimeMillis() + LINK_LIFETIME_MS;
+        String shortUrl = baseUrl + uniqueKey;
 
-        Link link = new Link(originalUrl, shortUrl, userUuid, limit, expiryTime);
+        int finalLimit = Math.max(userDefinedLimit, maxAccessLimit);
+        long expiryTime = System.currentTimeMillis() + Math.min(userDefinedLifetimeMs, defaultLifetimeMs);
+
+        Link link = new Link(originalUrl, shortUrl, userUuid, finalLimit, expiryTime);
         linkMap.put(shortUrl, link);
         userLinks.computeIfAbsent(userUuid, k -> new ArrayList<>()).add(link);
 
+        System.out.println("Ссылка создана. Истекает: " + new Date(expiryTime));
         return shortUrl;
     }
 
     @Override
     public void accessLink(String shortUrl) {
         Link link = linkMap.get(shortUrl);
-        if (link == null || System.currentTimeMillis() > link.expiryTime) {
+
+        if (link == null) {
             System.out.println("Ссылка не найдена или её срок истёк.");
+            return;
+        }
+
+        if (link.accessCount >= link.limit) {
+            System.out.println("Ссылка недоступна, так как лимит переходов был исчерпан.");
             linkMap.remove(shortUrl);
             return;
         }
-        if (link.accessCount >= link.limit) {
-            System.out.println("Лимит переходов по ссылке исчерпан.");
+
+        if (System.currentTimeMillis() > link.expiryTime) {
+            System.out.println("Срок действия ссылки истёк.");
+            linkMap.remove(shortUrl);
             return;
         }
 
         link.accessCount++;
+        System.out.println("Переход по ссылке...");
         try {
             Desktop.getDesktop().browse(new URI(link.originalUrl));
         } catch (Exception e) {
@@ -58,10 +73,67 @@ public class LinkService implements ILinkService {
         return userLinks.getOrDefault(userUuid, Collections.emptyList());
     }
 
+    @Override
+    public boolean updateLinkLimit(String shortUrl, UUID userUuid, int newLimit) {
+        Link link = linkMap.get(shortUrl);
+
+        if (link == null) {
+            System.out.println("Ссылка не найдена.");
+            return false;
+        }
+
+        if (!link.userUuid.equals(userUuid)) {
+            System.out.println("У вас нет прав на изменение лимита этой ссылки.");
+            return false;
+        }
+
+        link.limit = newLimit;
+        System.out.println("Лимит переходов по ссылке успешно обновлён.");
+        return true;
+    }
+
+
+    @Override
+    public boolean deleteUserLink(String shortUrl, UUID userUuid) {
+        Link link = linkMap.get(shortUrl);
+
+        if (link == null) {
+            System.out.println("Ссылка не найдена.");
+            return false;
+        }
+
+        if (!link.userUuid.equals(userUuid)) {
+            System.out.println("У вас нет прав на удаление этой ссылки.");
+            return false;
+        }
+
+        linkMap.remove(shortUrl);
+        List<Link> userLinksList = userLinks.get(userUuid);
+        if (userLinksList != null) {
+            userLinksList.removeIf(l -> l.shortUrl.equals(shortUrl));
+        }
+
+        System.out.println("Ссылка успешно удалена.");
+        return true;
+    }
+
     private void cleanupExpiredLinks() {
         long now = System.currentTimeMillis();
-        linkMap.values().removeIf(link -> now > link.expiryTime);
-        System.out.println("Очистка устаревших ссылок завершена.");
+
+        // Ищем и удаляем устаревшие ссылки или ссылки с исчерпанным лимитом переходов
+        linkMap.values().removeIf(link -> {
+            boolean isExpired = now > link.expiryTime;
+            boolean isLimitExceeded = link.accessCount >= link.limit;
+
+            if (isExpired) {
+                System.out.println("Ссылка истекла: " + link.shortUrl);
+            } else if (isLimitExceeded) {
+                System.out.println("Лимит переходов исчерпан для ссылки: " + link.shortUrl);
+            }
+
+            return isExpired || isLimitExceeded;
+        });
+
+        System.out.println("Очистка устаревших или заблокированных ссылок завершена.");
     }
 }
-

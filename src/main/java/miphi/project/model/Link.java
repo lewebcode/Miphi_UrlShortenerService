@@ -3,11 +3,11 @@ package miphi.project.model;
 import java.util.UUID;
 
 public class Link {
-    public String originalUrl;
-    public String shortUrl;
-    public UUID userUuid;
+    public final String originalUrl;
+    public final String shortUrl;
+    public final UUID userUuid;
     public int limit;
-    public long expiryTime;
+    public final long expiryTime;
     public int accessCount;
 
     public Link(String originalUrl, String shortUrl, UUID userUuid, int limit, long expiryTime) {
@@ -19,4 +19,5 @@ public class Link {
         this.accessCount = 0;
     }
 }
+
 
