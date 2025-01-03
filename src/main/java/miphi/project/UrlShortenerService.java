@@ -85,7 +85,7 @@ public class UrlShortenerService {
                     int limit = scanner.nextInt();
                     System.out.println("Введите время жизни ссылки (в миллисекундах):");
                     long lifetimeMs = scanner.nextLong();
-                    scanner.nextLine(); // Consume newline
+                    scanner.nextLine();
                     String shortUrl = app.linkService.createShortLink(originalUrl, currentUserUuid, limit, lifetimeMs);
                     System.out.println("Короткая ссылка: " + shortUrl);
                 }
@@ -129,7 +129,7 @@ public class UrlShortenerService {
                     String shortUrlToUpdate = scanner.nextLine();
                     System.out.println("Введите новый лимит переходов:");
                     int newLimit = scanner.nextInt();
-                    scanner.nextLine(); // Consume newline
+                    scanner.nextLine();
                     boolean isUpdated = app.linkService.updateLinkLimit(shortUrlToUpdate, currentUserUuid, newLimit);
                     if (isUpdated) {
                         System.out.println("Лимит переходов успешно обновлён.");

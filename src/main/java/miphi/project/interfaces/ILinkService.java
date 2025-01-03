@@ -10,5 +10,5 @@ public interface ILinkService {
     void accessLink(String shortUrl);
     List<Link> getUserLinks(UUID userUuid);
     boolean deleteUserLink(String shortUrlToDelete, UUID currentUserUuid);
-    boolean updateLinkLimit(String shortUrl, UUID userUuid, int newLimit); //
+    boolean updateLinkLimit(String shortUrl, UUID userUuid, int newLimit);
 }

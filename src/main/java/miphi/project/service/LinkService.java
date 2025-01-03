@@ -2,6 +2,7 @@ package miphi.project.service;
 
 import java.net.URI;
 import java.awt.Desktop;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -34,7 +35,9 @@ public class LinkService implements ILinkService {
         linkMap.put(shortUrl, link);
         userLinks.computeIfAbsent(userUuid, k -> new ArrayList<>()).add(link);
 
-        System.out.println("Ссылка создана. Истекает: " + new Date(expiryTime));
+        SimpleDateFormat dateFormatter = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
+        String formattedDate = dateFormatter.format(new Date(expiryTime));
+        System.out.println("Ссылка создана. Истекает: " + formattedDate);
         return shortUrl;
     }
 
